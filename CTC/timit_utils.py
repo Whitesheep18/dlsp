@@ -63,9 +63,9 @@ class Timit(Dataset):
     
 
 def get_log_energy(wav, win_length=16, hop_length=8):
-    avg = nn.AvgPool1d(win_length, stride=hop_length, ceil_mode=True)
+    avg = nn.AvgPool1d(win_length, stride=hop_length, padding=win_length//2)
     log_energy = torch.log(avg(wav**2)*win_length) # multiply by  len=16 to get sum instead of avg
-    log_energy = torch.cat([log_energy, torch.zeros(1, 1)], dim=1)
+    #print('avg pool', log_energy.shape)
     return log_energy # [1, T]
 
 def get_derivatives(spectogram):
@@ -75,7 +75,11 @@ def get_derivatives(spectogram):
 
 def preprocess(wav):
     """From wav to feature representation described in 5. Experiments / 5.1 Data"""
+    # make it divisible by 16
+    if wav.shape[1] % 16 != 0:
+        wav = wav[:, :-(wav.shape[1] % 16)]
     spectogram = torchaudio.transforms.MFCC(n_mfcc=12, log_mels=True, melkwargs={"win_length":16, "hop_length":8})(wav)
+    #print('spectogram', spectogram.shape)
     spectogram = torch.concat([spectogram, get_log_energy(wav).unsqueeze(0)], dim=1)
     spectogram = torch.cat([spectogram, get_derivatives(spectogram)], dim=1)
 

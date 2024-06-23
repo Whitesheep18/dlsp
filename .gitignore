@@ -165,3 +165,5 @@ CTC/sleep/
 *LibriSpeech*
 CTC/timit/
 CTC/figures/diagnostics
+CTC/sleep_30secwin/
+*wandb*

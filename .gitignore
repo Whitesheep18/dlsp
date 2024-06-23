@@ -163,7 +163,7 @@ transformer/data/
 transformer/da-en/
 CTC/sleep/
 *LibriSpeech*
-CTC/timit/
+CTC/asr/timit
 CTC/figures/diagnostics
 CTC/sleep_30secwin/
 *wandb*

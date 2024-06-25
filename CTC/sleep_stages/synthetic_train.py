@@ -9,7 +9,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import argparse
 import pickle
-import wandb
 
 class SyntheticSleepDataset(Dataset):
     def __init__(self, total_samples=1000):
@@ -100,7 +99,7 @@ class CTCNetworkLSTM(nn.Module):
     
 
 class CTCNetworkCNN(nn.Module):
-    def __init__(self, num_features, num_classes):
+    def __init__(self, num_features, num_classes, weight_init='default'):
         super().__init__()
         self.conv1 = nn.Conv1d(in_channels=num_features, out_channels=32, kernel_size=11, stride=1, padding='same')
         self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=7, stride=1, padding='same')
@@ -108,6 +107,20 @@ class CTCNetworkCNN(nn.Module):
         self.conv4 = nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding='same')
         self.linear = nn.Linear(256, num_classes)
         self.softmax = nn.LogSoftmax(dim=-1)
+
+        if 'fir' in weight_init.lower():
+            from scipy.signal import firwin
+            numtaps = 11
+            cutoff = [0.1, 0.3]
+            filter_coefficients = firwin(numtaps, cutoff, pass_zero='bandpass')
+            filter_coefficients = torch.tensor(filter_coefficients, dtype=torch.float32).view(1, 1, -1).repeat(32, 1, 1)
+
+            self.conv1.weight = nn.Parameter(filter_coefficients )
+
+        if "he" in weight_init.lower():
+            nn.init.kaiming_normal_(self.linear.weight)
+
+
 
 
     def forward(self, x):
@@ -140,7 +153,8 @@ class CTCNetworkCNNSimple(nn.Module):
         return x
 
 
-def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=None):
+def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=None, device='cpu'):
+    model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     model.train()
@@ -151,16 +165,19 @@ def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=No
     with tqdm(range(num_steps)) as pbar:
 
         for step in pbar:
-            if epoch % 3 == 0 or epoch==1:
-                if not sample:
+            if args.fig_path and (epoch % args.plot_every_n_epochs == 0 or epoch==1):
+                if sample is None:
                     sample = X, y, y_lens, stage_lengths
                 epoch_loss = val_losses[-1] if val_losses else np.nan
-                plot_diagnostics(model, sample, dataset.idx_to_sleep_stage, preds_title=f'epoch={epoch};val_loss={epoch_loss:.2f}')
+                plot_diagnostics(model.to('cpu'), sample, dataset.idx_to_sleep_stage, preds_title=f'epoch={epoch};val_loss={epoch_loss:.2f}')
+                model.to(device)
         
             X, y, y_lens, stage_lengths = next(iter(train_loader))
+            X, y, y_lens, = X.to(device), y.to(device), y_lens.to(device)
+
             optimizer.zero_grad()
             emissions = model(X)
-            input_lengths = torch.full(size=(X.shape[0],), fill_value=X.shape[1], dtype=torch.long)
+            input_lengths = torch.full(size=(X.shape[0],), fill_value=X.shape[1], dtype=torch.long, device=device)
             loss = ctc_loss(emissions.permute(1, 0, 2), y, input_lengths, y_lens, )
             loss.backward()
             optimizer.step()
@@ -179,6 +196,7 @@ def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=No
                 model.eval()
                 with torch.no_grad():
                     X, y, y_lens, stage_lengths = next(iter(valid_loader))
+                    X, y, y_lens, = X.to(device), y.to(device), y_lens.to(device)
                     val_loss = ctc_loss(model(X).permute(1, 0, 2), y, input_lengths, y_lens)
                     if args.with_logging:
                         wandb.log({'val_loss': val_loss.item()})
@@ -232,18 +250,30 @@ def plot_diagnostics(model, sample, labels_dict, preds_title=None):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--architecture', type=str, default='lstm', help='lstm, cnn or cnn_simple')
+    parser.add_argument('--architecture', type=str, default='lstm', choices=['lstm', 'cnn', 'cnn_simple'])
     parser.add_argument('--total_samples', type=int, default=1000)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--lr', type=float, default=10**(-3))
-    parser.add_argument('--fig_path', type=str, default='figures/diagnostics')
+    parser.add_argument('--fig_path', type=str, default='') #figures/diagnostics
     parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--use_diagnostic_sample', type=bool, default=True)
     parser.add_argument('--with_logging', type=bool, default=True)
     parser.add_argument('--kernel_size', type=int, default=11)
+    parser.add_argument('--plot_every_n_epochs', type=int, default=3)
+    parser.add_argument('--initialization', type=str, default='FIR', choices=['FIR', 'FIR+He','He', 'default'])
+    parser.add_argument('--tags', nargs='+')
+
     args = parser.parse_args()
+    if args.device == 'cuda':
+        if torch.cuda.is_available():
+            print('CUDA')
+            device = 'cuda'
+        else:
+            print('Cuda not available, setting device=cpu')
+            device = 'cpu'
+    else:
+        device = 'cpu'
 
     train_set_pct = 0.8
     dataset = SyntheticSleepDataset(total_samples=args.total_samples)
@@ -255,41 +285,39 @@ if __name__ == '__main__':
     #np.random.seed(args.seed)
 
     # load sample.pkl from pickle
-    if args.use_diagnostic_sample:
+    if args.fig_path:
         with open('sample.pkl', 'rb') as f:
             sample = pickle.load(f)
+        if not os.path.exists(args.fig_path):
+            os.mkdir(args.fig_path)
     else:
         sample=None
 
     if args.with_logging:
+        import wandb
            
         wandb.init(
         project="CTC", entity="metrics_logger",
-        config={
-        "architecture": args.architecture,
-        "total_samples": args.total_samples,
-        "epochs": args.epochs,
-        "batch_size": args.batch_size,
-        "seed": args.seed,
-        "lr": args.lr,
-        "fig_path": args.fig_path,
-        "device": args.device,
-        "use_diagnostic_sample": args.use_diagnostic_sample,
-        }
+        tags = args.tags,
+        config={k:v for k, v in args.__dict__.items() if k not in ["with_logging", "tags"]}
     )
 
+    print(args.__dict__)
 
     if args.architecture == 'lstm':
         model = CTCNetworkLSTM(num_features=1, num_classes=dataset.num_classes)
     elif args.architecture == 'cnn':
-        model = CTCNetworkCNN(num_features=1, num_classes=dataset.num_classes)
+        model = CTCNetworkCNN(num_features=1, num_classes=dataset.num_classes, weight_init=args.initialization)
     else:
         model = CTCNetworkCNNSimple(num_features=1, num_classes=dataset.num_classes, kernel_size=args.kernel_size)
 
-    losses, val_losses, model = train(model, train_loader, valid_loader, epochs=args.epochs, lr=args.lr, sample=sample)
+    print("model", model)
 
-    if args.with_logging:
+    losses, val_losses, model = train(model, train_loader, valid_loader, epochs=args.epochs, lr=args.lr, sample=sample, device=device)
+
+    if args.with_logging and args.fig_path:
         # save
+        model.to('cpu')
         sample = next(iter(valid_loader))
         full_path = plot_diagnostics(model, sample, dataset.idx_to_sleep_stage, preds_title=f'epoch={len(losses)};val_loss={val_losses[-1]:.2f}')
         wandb.log({"diagnostics": wandb.Image(full_path)})

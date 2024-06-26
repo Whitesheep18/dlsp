@@ -85,20 +85,36 @@ $$
 
 ## Miniproject
 
-### Dataset
-I utilized a dataset of biosignals that included sleep stage annotations: [8]. This dataset provided detailed recordings of various physiological signals, such as EEG, EOG, and EMG, along with corresponding sleep stage labels TODO: Hz, stats about patients
+Find code related to project in `CTC/sleep_stages`.
 
 ### Objective
-The goal was to train a deep learning model that could accurately predict the sequence of sleep stages from the biosignal data. To achieve this, I used the CTC loss. This model can be used to analyze and quantify the number of transitions between different sleep stages, providing insights into sleep quality and patterns.
+The goal was to train a deep learning model that could accurately predict the sequence of sleep stages from biosignal data. To achieve this, I used the CTC loss. This model can be used to analyze and quantify the number of transitions between different sleep stages, providing insights into sleep quality and patterns.
 For example, frequent transitions from deep sleep to lighter sleep stages could indicate sleep disturbances.
 
-### Model training
-TODO: preprocessing
-TODO: architectures
-TODO: diagnostic plot
+### Data
+I utilized a dataset of biosignals that included sleep stage annotations: [8]. This dataset provided detailed recordings of various physiological signals, such as EEG, EOG, and EMG, along with corresponding sleep stage labels.
+TODO: Hz, stats about patients
+Because it was difficult to train CTC from scratch, I experimented with a synthetic dataset first. I decreased the number of classes to 3, and each class had a single feature, a sine wave with frequencies 0.1, 0.2, 0.3, depending on the class.
 
+### Architectures
+I experimented with with two architectures: a Bidirectional LSTM with one layer (like in the CTC paper) and a 4 layer CNN network. Both were mapped to the desired amount of classes with a linear layer. See `m̀odules.py` for details.
+
+### Model training
+In all cases I observed that the loss had a double (or multiple) descent behaviour with spikes before the next descent indicating a new characteristic of the data being learnt the first one usually being to predict only the blank label (or more rarely a single label). The consequtive descents marked either learning to classify the first or the last class of the sample or learning to predict a specific class.
+![double_descent](./figures/typical_loss.png)
+
+**The synthetic data** was generated on the fly ie. a new sample was generated with every iteration for both training and validation. (This allowed me to experiment without regards to possible overfitting.) The CNN reached the desired state (the classes were clearly separated by the blank labels) much quicker than the LSTM architecture. 
+CNN:
+![cnn_training](./figures/cnn_chocolate-planet-24.gif)
+
+LSTM:
+![lstm_training](./figures/lstm_rose-paper-26.gif)
+However convergence was very dependent on initialization. This was partially mitigated by using He intialization for linear layers.
+
+#### Sleep data
+TODO
 ### Evaluation
-TODO: decode and compare
+TODO
 
 
 

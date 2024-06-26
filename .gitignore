@@ -165,5 +165,8 @@ CTC/sleep/
 *LibriSpeech*
 CTC/asr/timit
 CTC/figures/diagnostics
+CTC/sleep_stages/figures/diagnostics
 CTC/sleep_30secwin/
+CTC/sleep_stages/sleep
 *wandb*
+*sleep-edf-database-expanded*

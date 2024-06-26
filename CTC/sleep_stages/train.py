@@ -3,7 +3,7 @@ import os
 from torch.utils.data import Dataset
 import torch
 import torch.nn as nn 
-from torch.nn.utils import rnn
+
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -13,57 +13,48 @@ import pickle
 from modules import CTCNetworkCNN, CTCNetworkCNNSimple, CTCNetworkLSTM
 from utils import collate_fn, plot_diagnostics
 
-class SyntheticSleepDataset(Dataset):
-    def __init__(self, total_samples=1000):
-        #self.sleep_stage_to_idx = {'Sleep stage W': 7, 'Sleep stage 1': 1, 'Sleep stage 2': 2, 'Sleep stage 3': 3, 'Sleep stage 4': 4, 'Sleep stage R': 5, 'Sleep stage ?': 6, 'Movement time': 8}
-        #self.idx_to_sleep_stage = {7: 'Sleep stage W', 1: 'Sleep stage 1', 2: 'Sleep stage 2', 3: 'Sleep stage 3', 4: 'Sleep stage 4', 5: 'Sleep stage R', 6: 'Sleep stage ?', 8: 'Movement time'}
+
+# dataset that loads data like np.load("sleep/SC4412-0.npy")
+class SleepDataset(Dataset):
+    def __init__(self, root_dir, transform=None, normalize=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        self.files = [x.split('.')[0] for x in os.listdir(root_dir) if 'labels' not in x and 'timestamps' not in x]
         
-        self.sleep_stage_to_idx = {'Class 1': 1, 'Class 2': 2, 'class 3': 3}
-        self.idx_to_sleep_stage = {1: 'Class 1', 2: 'Class 2', 3: 'Class 3'}
-    
-        self.num_classes = len(self.sleep_stage_to_idx) + 1 #plus blank
-        self.total_samples = total_samples
-    
+        #0 is reserved for padding... or blank?
+        self.sleep_stage_to_idx = {'Sleep stage W': 7, 'Sleep stage 1': 1, 'Sleep stage 2': 2, 'Sleep stage 3': 3, 'Sleep stage 4': 4, 'Sleep stage R': 5, 'Sleep stage ?': 6, 'Movement time': 8}
+        self.idx_to_sleep_stage = {7: 'Sleep stage W', 1: 'Sleep stage 1', 2: 'Sleep stage 2', 3: 'Sleep stage 3', 4: 'Sleep stage 4', 5: 'Sleep stage R', 6: 'Sleep stage ?', 8:'Movement time'}
+        
+        self.num_classes = len(self.sleep_stage_to_idx) + 1
+        self.normalize = normalize
+        if normalize is not None:
+            self.mean = normalize[0]
+            self.std = normalize[1]
+
     def __len__(self):
-        return self.total_samples
-    
-    @staticmethod
-    def generate_signal(stage, length):
-        #carrier = np.sin(np.arange(length)*stage/10)
-        #carrier = (np.ones(length)*stage/10)
-        frequency = stage/10 # 0.1, 0.2, or 0.3
-        sr = 1 #hz
-        t = np.arange(0, length, 1/sr)
-        carrier = np.sin(2 * np.pi * frequency * t)
-        return carrier[:, np.newaxis]
-    
-    def generate_sample(self, stage, length):
-        carrier = self.generate_signal(stage, length)
-        # return np.concatenate([carrier, carrier + 1/stage, carrier + 2/stage, carrier + 3/stage], axis=1)
-        return carrier
+        return len(self.files)
     
     def __getitem__(self, idx):
-        i = 0
-        max_time = 60
-        max_time = 240
-        sample = np.zeros(shape=(max_time, 1))
-        stages = []
-        stage_lengths = []
-        while i < max_time:
-            stage = np.random.randint(1, self.num_classes)
-            stages.append(stage)
-            length = np.random.randint(5, max_time//2)
-            
-            if i + length > max_time:
-                length = max_time - i
-            stage_lengths.append(length)
-            sample[i:i+length] = self.generate_sample(stage, length)
-            i += length
         
-        sample = torch.from_numpy(sample).float()
-        stages = torch.from_numpy(np.array(stages))
-        stage_lengths = torch.from_numpy(np.array(stage_lengths))
-        return sample, stages, stage_lengths
+        sample = os.path.join(self.root_dir, self.files[idx])
+        X = np.load(sample + ".npy")
+        y = np.load(sample + "-labels.npy", allow_pickle=True)
+        stage_lengths = np.diff(np.load(sample + "-timestamps.npy"))
+        # append the last stage length
+        stage_lengths = np.append(stage_lengths, len(X) - np.sum(stage_lengths))
+
+        if self.normalize:
+            X = (X - self.mean) / self.std
+
+        # turn y into idxs
+        y = np.array([self.sleep_stage_to_idx[x] for x in y])
+
+        # turn into torch tensors
+        X = torch.from_numpy(X).float()
+        y = torch.from_numpy(y)
+        stage_lengths = torch.from_numpy(stage_lengths)
+
+        return X, y, stage_lengths
 
 
 def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=None, device='cpu'):
@@ -119,19 +110,17 @@ def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=No
         return losses, val_losses, model
 
 
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--architecture', type=str, default='lstm', choices=['lstm', 'cnn', 'cnn_simple'])
-    parser.add_argument('--total_samples', type=int, default=1000)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--lr', type=float, default=10**(-3))
     parser.add_argument('--fig_path', type=str, default='') #figures/diagnostics
-    parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--with_logging', type=bool, default=False)
+    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'])
+    parser.add_argument('--with_logging', type=bool, default=True)
     parser.add_argument('--kernel_size', type=int, default=11)
     parser.add_argument('--plot_every_n_epochs', type=int, default=3)
     parser.add_argument('--initialization', type=str, default='FIR', choices=['FIR', 'FIR+He','He', 'default'])
@@ -140,7 +129,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.device == 'cuda':
         if torch.cuda.is_available():
-            print('CUDA')
+            print('Cuda is available, setting device=cuda')
             device = 'cuda'
         else:
             print('Cuda not available, setting device=cpu')
@@ -149,7 +138,7 @@ if __name__ == '__main__':
         device = 'cpu'
 
     train_set_pct = 0.8
-    dataset = SyntheticSleepDataset(total_samples=args.total_samples)
+    dataset = SleepDataset('sleep', normalize=[np.array([0, 0, 0, 0]), np.array([0.00002, 0.00001, 0.00005, 0.0000025])])
     train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [int(len(dataset)*train_set_pct), len(dataset) - int(len(dataset)*train_set_pct)])
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn)
     valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn)
@@ -157,13 +146,14 @@ if __name__ == '__main__':
     #torch.manual_seed(args.seed)
     #np.random.seed(args.seed)
 
-    sample = dataset[0]
-    with open('sample_synthetic.pkl', 'wb') as f:
-        pickle.dump(sample, f)
+    #sample = next(iter(valid_loader))
+    #with open('sample.pkl', 'wb') as f:
+    #    pickle.dump(sample, f)
+    #quit()
 
     # load sample.pkl from pickle
     if args.fig_path:
-        with open('sample_synthetic.pkl', 'rb') as f:
+        with open('sample.pkl', 'rb') as f:
             sample = pickle.load(f)
         if not os.path.exists(args.fig_path):
             os.mkdir(args.fig_path)
@@ -173,7 +163,7 @@ if __name__ == '__main__':
     if args.with_logging:
         import wandb
         config = {k:v for k, v in args.__dict__.items() if k not in ["with_logging", "tags"]}
-        config['data'] = 'synthetic'
+        config['data'] = 'sleep'
            
         wandb.init(
         project="CTC", entity="metrics_logger",
@@ -182,13 +172,14 @@ if __name__ == '__main__':
     )
 
     print(args.__dict__)
+    num_features = next(iter(valid_loader))[0].shape[-1]
 
     if args.architecture == 'lstm':
-        model = CTCNetworkLSTM(num_features=1, num_classes=dataset.num_classes)
+        model = CTCNetworkLSTM(num_features=num_features, num_classes=dataset.num_classes)
     elif args.architecture == 'cnn':
-        model = CTCNetworkCNN(num_features=1, num_classes=dataset.num_classes, weight_init=args.initialization)
+        model = CTCNetworkCNN(num_features=num_features, num_classes=dataset.num_classes, weight_init=args.initialization)
     else:
-        model = CTCNetworkCNNSimple(num_features=1, num_classes=dataset.num_classes, kernel_size=args.kernel_size)
+        model = CTCNetworkCNNSimple(num_features=num_features, num_classes=dataset.num_classes, kernel_size=args.kernel_size)
 
     print("model", model)
 

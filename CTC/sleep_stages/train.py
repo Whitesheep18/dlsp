@@ -119,8 +119,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--lr', type=float, default=10**(-3))
     parser.add_argument('--fig_path', type=str, default='') #figures/diagnostics
-    parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--with_logging', type=bool, default=False)
+    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'])
+    parser.add_argument('--with_logging', type=bool, default=True)
     parser.add_argument('--kernel_size', type=int, default=11)
     parser.add_argument('--plot_every_n_epochs', type=int, default=3)
     parser.add_argument('--initialization', type=str, default='FIR', choices=['FIR', 'FIR+He','He', 'default'])
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.device == 'cuda':
         if torch.cuda.is_available():
-            print('CUDA')
+            print('Cuda is available, setting device=cuda')
             device = 'cuda'
         else:
             print('Cuda not available, setting device=cpu')

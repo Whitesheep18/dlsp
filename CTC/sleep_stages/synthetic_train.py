@@ -157,11 +157,12 @@ if __name__ == '__main__':
     #torch.manual_seed(args.seed)
     #np.random.seed(args.seed)
 
-    sample = dataset[0]
-    with open('sample_synthetic.pkl', 'wb') as f:
-        pickle.dump(sample, f)
-
     # load sample.pkl from pickle
+    #sample = next(iter(valid_loader))
+    #with open('sample_synthetic.pkl', 'wb') as f:
+    #    pickle.dump(sample, f)
+    #quit()
+
     if args.fig_path:
         with open('sample_synthetic.pkl', 'rb') as f:
             sample = pickle.load(f)

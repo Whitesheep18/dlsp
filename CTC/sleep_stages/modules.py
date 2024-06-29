@@ -2,13 +2,16 @@ import torch.nn as nn
 import torch
 
 class CTCNetworkLSTM(nn.Module):
-    def __init__(self, num_features, num_classes):
+    def __init__(self, num_features, num_classes, weight_init='default', dropout=0.1):
         super().__init__()
         self.lstm = nn.LSTM(input_size=num_features, hidden_size=num_classes, num_layers=1, 
                             batch_first=True, bidirectional=True)
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(dropout)
         self.output = nn.Linear(2*num_classes, num_classes)
         self.softmax = nn.LogSoftmax(dim=-1)
+
+        if "he" in weight_init.lower():
+            nn.init.kaiming_normal_(self.output.weight)
 
     def forward(self, x):
         x, _ = self.lstm(x)

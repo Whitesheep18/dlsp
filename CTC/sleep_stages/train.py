@@ -73,7 +73,7 @@ def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=No
                 if sample is None:
                     sample = X, y, y_lens, stage_lengths
                 epoch_loss = val_losses[-1] if val_losses else np.nan
-                plot_diagnostics(model.to('cpu'), sample, dataset.idx_to_sleep_stage, preds_title=f'epoch={epoch};val_loss={epoch_loss:.2f}', fig_path=args.fig_path)
+                plot_diagnostics(model.to('cpu'), sample, dataset.idx_to_sleep_stage, preds_title=f'epoch={epoch};val_loss={epoch_loss:.2f}_{wandb.run.name}', fig_path=args.fig_path)
                 model.to(device)
         
             X, y, y_lens, stage_lengths = next(iter(train_loader))
@@ -125,6 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--plot_every_n_epochs', type=int, default=3)
     parser.add_argument('--initialization', type=str, default='FIR', choices=['FIR', 'FIR+He','He', 'default'])
     parser.add_argument('--tags', nargs='+')
+    parser.add_argument('--dropout', type=float, default=0.1)
 
     args = parser.parse_args()
     if args.device == 'cuda':
@@ -175,7 +176,7 @@ if __name__ == '__main__':
     num_features = next(iter(valid_loader))[0].shape[-1]
 
     if args.architecture == 'lstm':
-        model = CTCNetworkLSTM(num_features=num_features, num_classes=dataset.num_classes)
+        model = CTCNetworkLSTM(num_features=num_features, num_classes=dataset.num_classes, weight_init=args.initialization, dropout=args.dropout)
     elif args.architecture == 'cnn':
         model = CTCNetworkCNN(num_features=num_features, num_classes=dataset.num_classes, weight_init=args.initialization)
     else:
@@ -190,6 +191,7 @@ if __name__ == '__main__':
         model.to('cpu')
         sample = next(iter(valid_loader))
         full_path = plot_diagnostics(model, sample, dataset.idx_to_sleep_stage, preds_title=f'epoch={len(losses)};val_loss={val_losses[-1]:.2f}', fig_path=args.fig_path)
+        print(full_path)
         wandb.log({"diagnostics": wandb.Image(full_path)})
 
         # save synthetic_train.py

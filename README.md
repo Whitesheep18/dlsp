@@ -31,10 +31,26 @@ Neural Networks (Chapter 7 -Connectionist Temporal Classification) [5]
 ![lstm](./figures/lstm.png)
 
 * **Backpropagation through time**: Training reccurent type of architectures involve unfolding the RNN in time and applying the chain rule for derivatives to compute the gradients for each time step.
-
-
-TODO: math from Murphy + derivation
-
+The vanilla RNN can be expressed as folows (omitting the bias term for simplicity)
+$$
+\begin{align*}
+h_t &= W_{hx} x_t + W_{hh}h_{t-1}\\
+o_t &= W_{ho} h_t
+\end{align*}
+$$
+where $x_t$ is the input sequence, $h_t$ is the hidden state and $o_t$ is the output sequence.The loss can be expressed using the true labels $y_t$ and the outputs $o_t$:
+$$
+\begin{align*}
+L = \frac1T \sum_{t=1}^T l(y_t, o_t)
+\end{align*}
+$$
+To find the derivative we use the chain rule:
+$$
+\begin{align*}
+\frac{\partial L}{\partial w_h} = \frac1T \sum_{i=1}^T \frac{\partial l(y_t, o_t)}{\partial w_h} = \frac1T \sum_{i=1}^T \frac{\partial l}{\partial o_t} \frac{\partial o_t}{\partial h_t} \frac{\partial h_t}{\partial{w_t}}
+\end{align*}
+$$
+where $\w_h$ holds all trainable parameters.
 ### Transformers
 
 * **Applications**: Transformers are effective for machine translation tasks, where the goal is to translate text from one language to another. Unlike RNNs, transformers do not require sequential processing, allowing them to process entire sentences simultaneously. This parallelism makes transformers faster and more efficient for training on large datasets.

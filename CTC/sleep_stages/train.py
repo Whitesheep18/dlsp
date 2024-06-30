@@ -57,10 +57,10 @@ class SleepDataset(Dataset):
         return X, y, stage_lengths
 
 
-def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=None, device='cpu'):
+def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=None, device='cpu', weight_decay=0):
     model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     model.train()
     ctc_loss = nn.CTCLoss(blank=0, zero_infinity=True, reduction='mean')
     losses, val_losses = [], []
@@ -126,6 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--initialization', type=str, default='FIR', choices=['FIR', 'FIR+He','He', 'default'])
     parser.add_argument('--tags', nargs='+')
     parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--weight_decay', type=float, default=0)
 
     args = parser.parse_args()
     if args.device == 'cuda':
@@ -184,7 +185,7 @@ if __name__ == '__main__':
 
     print("model", model)
 
-    losses, val_losses, model = train(model, train_loader, valid_loader, epochs=args.epochs, lr=args.lr, sample=sample, device=device)
+    losses, val_losses, model = train(model, train_loader, valid_loader, epochs=args.epochs, lr=args.lr, sample=sample, device=device, weight_decay=args.weight_decay)
 
     if args.with_logging and args.fig_path:
         # save

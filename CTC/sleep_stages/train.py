@@ -195,6 +195,6 @@ if __name__ == '__main__':
         print(full_path)
         wandb.log({"diagnostics": wandb.Image(full_path)})
 
-        # save synthetic_train.py
-        wandb.save('synthetic_train.py')
+        # save train.py
+        wandb.save('train.py')
 

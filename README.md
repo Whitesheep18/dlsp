@@ -150,10 +150,9 @@ LSTM:
 However convergence was very dependent on initialization. This was partially mitigated by using He intialization for linear layers.
 
 #### Sleep data
-TODO
-### Evaluation
-TODO
+My experiments with CTC training didn't produce satisfactory results as the method couldn't identify sleep stages within the provided training time. Most of the plots lacked the distinct spikes you'd expect, indicating that the models weren't effectively learning the patterns. Towards the end of some runs, there were occasional spikes, but they didn't always correspond to the correct labels. Additionally, I noticed significant overfitting in most of the runs as indicated by the increasing validation loss at times. Introducing a higher dropout rate later in the training slowed down the process but didn't significantly improve performance. The same issue persisted with weight decay; it didn't lead to noticeable performance improvements.
 
+I'm unsure if the problem was due to insufficient training time or other underlying factors. It’s possible that with more training or different adjustments, the models might improve. Additionally, I think more experiments with data preprocessing are needed. For example, trying different normalization techniques (eg. one set of normalization parameters per patient), applying more rigorous filtering methods or further increasing sampling rate could potentially enhance model performance. (Especially because some stages were very brief.) Right now, it’s hard to pinpoint the exact cause of the issue. Despite the current setbacks, I believe this method has potential and could work with further refinement and optimization.
 
 
 

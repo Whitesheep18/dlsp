@@ -33,12 +33,27 @@ class CTCNetworkCNN(nn.Module):
 
         if 'fir' in weight_init.lower():
             from scipy.signal import firwin
+            fs = 1
             numtaps = 11
-            cutoff = [0.1, 0.3]
-            filter_coefficients = firwin(numtaps, cutoff, pass_zero='bandpass')
-            filter_coefficients = torch.tensor(filter_coefficients, dtype=torch.float32).view(1, 1, -1).repeat(32, 1, 1)
+            numbanks = 32
+            bandwidth = (fs / 2) / numbanks
 
-            self.conv1.weight = nn.Parameter(filter_coefficients )
+            filter_coefficients = []
+
+            h = firwin(numtaps, bandwidth, fs=fs, pass_zero='lowpass')
+            filter_coefficients.append(torch.tensor(h, dtype=torch.float32).view(1, 1, -1))
+            band_start = bandwidth
+
+            for _ in range(1, numbanks - 1):
+                h = firwin(numtaps, [band_start, band_start + bandwidth], fs=fs, pass_zero='bandpass')
+                filter_coefficients.append(torch.tensor(h, dtype=torch.float32).view(1, 1, -1))
+                band_start += bandwidth
+
+            # create last filter as high pass
+            h = firwin(numtaps, band_start, fs=fs, pass_zero='highpass')
+            filter_coefficients.append(torch.tensor(h, dtype=torch.float32).view(1, 1, -1))
+            self.conv1.weight = nn.Parameter(torch.cat(filter_coefficients))
+
 
         if "he" in weight_init.lower():
             nn.init.kaiming_normal_(self.linear.weight)

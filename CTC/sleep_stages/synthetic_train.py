@@ -3,15 +3,14 @@ import os
 from torch.utils.data import Dataset
 import torch
 import torch.nn as nn 
-from torch.nn.utils import rnn
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import argparse
 import pickle
+from torchmetrics.text import CharErrorRate
 
 from modules import CTCNetworkCNN, CTCNetworkCNNSimple, CTCNetworkLSTM
-from utils import collate_fn, plot_diagnostics
+from utils import collate_fn, plot_diagnostics, GreedyCTCDecoder, calc_metric
 
 class SyntheticSleepDataset(Dataset):
     def __init__(self, total_samples=1000):
@@ -68,6 +67,12 @@ class SyntheticSleepDataset(Dataset):
 
 def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=None, device='cpu'):
     model.to(device)
+    mer = CharErrorRate()
+    labels = [None for i in range(dataset.num_classes)]
+    labels[0] = 'b' # blank
+    for idx in dataset.idx_to_sleep_stage:
+        labels[idx] =  dataset.idx_to_sleep_stage[idx][-1]
+    decoder = GreedyCTCDecoder(labels)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     model.train()
@@ -105,19 +110,21 @@ def train(model, train_loader, valid_loader, epochs=10, lr = 10**(-3), sample=No
                 losses.append(loss.item())
                 # record loss with wandb
                 if args.with_logging:
-                    wandb.log({'train_loss': loss.item()})
+                    train_cer = calc_metric(mer, decoder, emissions, y, y_lens, dataset.idx_to_sleep_stage)
+                    wandb.log({'train_loss': loss.item(), 'train_cer': train_cer})
                 model.eval()
                 with torch.no_grad():
                     X, y, y_lens, stage_lengths = next(iter(valid_loader))
                     X, y, y_lens, = X.to(device), y.to(device), y_lens.to(device)
-                    val_loss = ctc_loss(model(X).permute(1, 0, 2), y, input_lengths, y_lens)
+                    emissions = model(X)
+                    val_loss = ctc_loss(emissions.permute(1, 0, 2), y, input_lengths, y_lens)
                     if args.with_logging:
-                        wandb.log({'val_loss': val_loss.item()})
+                        val_cer = calc_metric(mer, decoder, emissions, y, y_lens, dataset.idx_to_sleep_stage)
+                        wandb.log({'val_loss': val_loss.item(), 'val_cer': val_cer})
                     val_losses.append(val_loss.item())
                 model.train()
 
         return losses, val_losses, model
-
 
 
 if __name__ == '__main__':
@@ -131,9 +138,9 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=10**(-3))
     parser.add_argument('--fig_path', type=str, default='') #figures/diagnostics
     parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--with_logging', type=bool, default=False)
+    parser.add_argument('--with_logging', type=bool, default=True)
     parser.add_argument('--kernel_size', type=int, default=11)
-    parser.add_argument('--plot_every_n_epochs', type=int, default=3)
+    parser.add_argument('--plot_every_n_epochs', type=int, default=10)
     parser.add_argument('--initialization', type=str, default='FIR', choices=['FIR', 'FIR+He','He', 'default'])
     parser.add_argument('--tags', nargs='+')
 

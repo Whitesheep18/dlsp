@@ -60,3 +60,41 @@ def plot_diagnostics(model, sample, labels_dict, preds_title=None, fig_path='.')
 
     model.train()
     return full_path
+    
+def calc_metric(metric, decoder, emissions, y, y_lens, labels_dict):
+    
+    ytrue, ypred = [], []
+    for i in range(y.shape[0]):
+        #print(i)
+        ytrue.append(''.join([labels_dict[l][-1] for l in y[i][:y_lens[i].item()].numpy()]))
+        #print(emissions[i].shape)
+        #print(emissions[i].argmax(axis=1))
+        pred = decoder(emissions[i])
+        if len(pred) > 0:
+            ypred.append(pred[0])
+        else:
+            ypred.append('')
+    #print(ytrue)
+    #print(ypred)
+
+    return metric(ytrue, ypred)
+
+class GreedyCTCDecoder(torch.nn.Module):
+    def __init__(self, labels, blank=0):
+        super().__init__()
+        self.labels = labels
+        self.blank = blank
+
+    def forward(self, emission: torch.Tensor):
+        """Given a sequence emission over labels, get the best path
+        Args:
+          emission (Tensor): Logit tensors. Shape `[num_seq, num_label]`.
+
+        Returns:
+          List[str]: The resulting transcript
+        """
+        indices = torch.argmax(emission, dim=-1)  # [num_seq,]
+        indices = torch.unique_consecutive(indices, dim=-1)
+        indices = [i for i in indices if i != self.blank]
+        joined = "".join([self.labels[i] for i in indices])
+        return joined.replace("|", " ").strip().split()

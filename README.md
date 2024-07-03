@@ -56,7 +56,7 @@ $$
 \frac{\partial h_t}{\partial{w_h}} = \frac{\partial h_t}{\partial w_h} + \frac{\partial h_t}{\partial h_{t-1}} \frac{\partial h_{t-1}}{\partial w_h}
 \end{align*}
 $$
-to see the recursion we can rename the terms and write out the expression for a couple of timesteps:
+to understand the recursion we can rename the terms and write out the expression for a couple of timesteps:
 $$
 \begin{align*}
 a_t &= b_t + c_t a_{t-1} \\
@@ -131,7 +131,6 @@ For example, frequent transitions from deep sleep to lighter sleep stages could 
 
 ### Data
 I utilized a dataset of biosignals that included sleep stage annotations: [8]. This dataset provided detailed recordings of various physiological signals, such as EEG, EOG, and EMG, along with corresponding sleep stage labels.
-TODO: Hz, stats about patients
 Because it was difficult to train CTC from scratch, I experimented with a synthetic dataset first. I decreased the number of classes to 3, and each class had a single feature, a sine wave with frequencies 0.1, 0.2, 0.3, depending on the class.
 
 ### Architectures
@@ -160,6 +159,17 @@ I'm unsure if the problem was due to insufficient training time or other underly
 
 Despite the current setbacks, I believe this method has potential and could work with further refinement and optimization.
 
+### Evaluation 
+
+I evaluated the performance of the models mainly qualitatively ie. to see wheter the emission probabilities were higher around stage switching (either single or double spike). The models trained on the sleep dataset had weak performance, but the models trained on the synthetic dataset were satisfactory by this method. Therefore I also evaluated Character Error Rate on these experiemnets. This is defined as:
+$$
+CER = \frac{S + D + I}{S + D + C}
+$$
+where S is the number of substitutions, D is the number of deletitions, I is the number of insertions and C is the number of correct labels. (In this case characters were sleep stages 1, 2 and 3). The following is a plot showing the metric approaching 0, the perfect score:
+
+![cer](./figures/cer.png)
+
+Note that in the begining when only blank labels are probable, we get an empty prediction, in which case this metric is infinity. Moreover,  in case of runs where I didn't observe convergence the main contributior was substitutions and insertions (predicting only a specific label) and when I did observe convergence, it was deletitions.
 
 [1]: https://arxiv.org/abs/2401.03717
 [2]: https://probml.github.io/pml-book/book1.html

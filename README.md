@@ -177,10 +177,12 @@ Despite the current setbacks, I believe this method has potential and could work
 
 ### Evaluation 
 
-I evaluated the performance of the models mainly qualitatively ie. to see wheter the emission probabilities were higher around stage switching (either single or double spike). The models trained on the sleep dataset had weak performance, but the models trained on the synthetic dataset were satisfactory by this method. Therefore I also evaluated Character Error Rate on these experiemnets. This is defined as:
+I evaluated the performance of the models mainly qualitatively ie. to see wheter the emission probabilities were higher around stage switching (either single or double spike). The models trained on the sleep dataset had weak performance, but the models trained on the synthetic dataset were satisfactory by this method. Therefore I also evaluated Character Error Rate on these experiemnets using greedy decoding (which worked well in this case). This is defined as:
+
 $$
 CER = \frac{S + D + I}{S + D + C}
 $$
+
 where S is the number of substitutions, D is the number of deletitions, I is the number of insertions and C is the number of correct labels. (In this case characters were sleep stages 1, 2 and 3). The following is a plot showing the metric approaching 0, the perfect score:
 
 ![cer](./figures/cer.png)

@@ -32,31 +32,40 @@ Neural Networks (Chapter 7 -Connectionist Temporal Classification) [5]
 
 * **Backpropagation through time**: Training reccurent type of architectures involve unfolding the RNN in time and applying the chain rule for derivatives to compute the gradients for each time step.
 The vanilla RNN can be expressed as folows (omitting the bias term for simplicity):
+
 $$
 \begin{align*}
 h_t &= W_{hx} x_t + W_{hh}h_{t-1}\\
 o_t &= W_{ho} h_t
 \end{align*}
 $$
+
 where $x_t$ is the input sequence, $h_t$ is the hidden state and $o_t$ is the output sequence.The loss can be expressed using the true labels $y_t$ and the outputs $o_t$:
+
 $$
 \begin{align*}
 L = \frac1T \sum_{t=1}^T l(y_t, o_t)
 \end{align*}
 $$
+
 To find the derivative we use the chain rule:
+
 $$
 \begin{align*}
 \frac{\partial L}{\partial w_h} = \frac1T \sum_{i=1}^T \frac{\partial l(y_t, o_t)}{\partial w_h} = \frac1T \sum_{i=1}^T \frac{\partial l}{\partial o_t} \frac{\partial o_t}{\partial h_t} \frac{\partial h_t}{\partial{w_t}}
 \end{align*}
 $$
+
 where $w_h$ holds all trainable parameters. The first part is the gradient of the final loss (eg. softmax or MSE) and the second part is the output layer (like linear regression). We can see that the last term is recursive. If we expand it using the chain rule again we get:
+
 $$
 \begin{align*}
 \frac{\partial h_t}{\partial{w_h}} = \frac{\partial h_t}{\partial w_h} + \frac{\partial h_t}{\partial h_{t-1}} \frac{\partial h_{t-1}}{\partial w_h}
 \end{align*}
 $$
-to see the recursion we can rename the terms and write out the expression for a couple of timesteps:
+
+to understand the recursion we can rename the terms and write out the expression for a couple of timesteps:
+
 $$
 \begin{align*}
 a_t &= b_t + c_t a_{t-1} \\
@@ -67,12 +76,15 @@ a_4 &= b_4 + c_4 b_3 + c_4 c_3 b_2 + c_4 c_3 c_2 b_1 \\
 a_t &= b_t + \sum_{i=1}^{t-1} \left( \prod_{j=i+1}^t c_j \right) b_i
 \end{align*}
 $$
+
 So the recursive part becomes:
+
 $$
 \begin{align*}
 \frac{\partial h_t}{\partial{w_h}} = \frac{\partial h_t}{\partial w_h} + \sum_{i=1}^{t-1} \left( \prod_{j=i+1}^t \frac{\partial h_j}{\partial h_{j-1}} \right) \frac{\partial h_{i}}{\partial w_h}
 \end{align*}
 $$
+
 ### Transformers
 
 * **Applications**: Transformers are effective for machine translation tasks, where the goal is to translate text from one language to another. Unlike RNNs, transformers do not require sequential processing, allowing them to process entire sentences simultaneously. This parallelism makes transformers faster and more efficient for training on large datasets.
@@ -131,7 +143,6 @@ For example, frequent transitions from deep sleep to lighter sleep stages could 
 
 ### Data
 I utilized a dataset of biosignals that included sleep stage annotations: [8]. This dataset provided detailed recordings of various physiological signals, such as EEG, EOG, and EMG, along with corresponding sleep stage labels.
-TODO: Hz, stats about patients
 Because it was difficult to train CTC from scratch, I experimented with a synthetic dataset first. I decreased the number of classes to 3, and each class had a single feature, a sine wave with frequencies 0.1, 0.2, 0.3, depending on the class.
 
 ### Architectures
@@ -148,15 +159,35 @@ CNN:
 LSTM:
 ![lstm_training](./figures/lstm_rose-paper-26.gif)
 However convergence was very dependent on initialization. This was partially mitigated by using He intialization for linear layers.
+In the above plots we can see the double spiking phenomenon they descirbe in the CTC paper.
 
-#### Sleep data
-TODO
-### Evaluation
-TODO
+**My experiments with the sleep data** didn't produce satisfactory results as the method couldn't identify sleep stages within the provided training time. Most of the plots lacked the distinct spikes you'd expect, indicating that the models weren't effectively learning the patterns. Towards the end of some runs, there were occasional spikes, but they didn't always correspond to the correct labels. Additionally, I noticed significant overfitting in most of the runs as indicated by the increasing validation loss at times. Introducing a higher dropout rate later in the training slowed down the process but didn't significantly improve performance. The same issue persisted with weight decay; it didn't lead to noticeable performance improvements. Although I noticed that overfitting didn't mean no spikes formed in the validation set.
 
+![overfitting](./figures/overfitting.png)
 
+I'm unsure if the problem was due to insufficient training time or other underlying factors. It’s possible that with more training or different adjustments, the models might improve. Additionally, I think more experiments with data preprocessing are needed. For example, trying different normalization techniques (eg. one set of normalization parameters per patient), applying more rigorous filtering methods or further increasing sampling rate could potentially enhance model performance. (Especially because some stages were very brief.) It might also be benefitial to use generic pretraining on EEG signals first (eg. contrastive learning in the manner of wav2vec) so that the model only has to learn the unaligned mapping of sleep stages from starts. Below is a figure depicting the best attempt so far on a given validation sample.
 
+![best_valid](./figures/best.png)
 
+And a given training sample:
+
+![best_train](./figures/diagnostics_epoch=1000;val_loss=7.65_crisp-terrain-157.png)
+
+Despite the current setbacks, I believe this method has potential and could work with further refinement and optimization.
+
+### Evaluation 
+
+I evaluated the performance of the models mainly qualitatively ie. to see wheter the emission probabilities were higher around stage switching (either single or double spike). The models trained on the sleep dataset had weak performance, but the models trained on the synthetic dataset were satisfactory by this method. Therefore I also evaluated Character Error Rate on these experiemnets using greedy decoding (which worked well in this case). This is defined as:
+
+$$
+CER = \frac{S + D + I}{S + D + C}
+$$
+
+where S is the number of substitutions, D is the number of deletitions, I is the number of insertions and C is the number of correct labels. (In this case characters were sleep stages 1, 2 and 3). The following is a plot showing the metric approaching 0, the perfect score:
+
+![cer](./figures/cer.png)
+
+Note that in the begining when only blank labels are probable, we get an empty prediction, in which case this metric is infinity. Moreover,  in case of runs where I didn't observe convergence the main contributior was substitutions and insertions (predicting only a specific label) and when I did observe convergence, it was deletitions.
 
 [1]: https://arxiv.org/abs/2401.03717
 [2]: https://probml.github.io/pml-book/book1.html

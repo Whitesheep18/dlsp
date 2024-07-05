@@ -1,4 +1,4 @@
-name: dlsp3
+name: dlsp
 channels:
   - pytorch
   - defaults
